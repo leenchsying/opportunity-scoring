@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opportunity Scoring Radar</title>
+<style>
+  body { font-family: sans-serif; background: #fff; color: #1a1a1a; margin: 0; padding: 1.5rem; box-sizing: border-box; }
+  .factor-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .factor-label { font-size: 13px; color: #555; width: 160px; flex-shrink: 0; }
+  .factor-question { font-size: 11px; color: #888; margin-top: 2px; }
+  .star-group { display: flex; gap: 4px; }
+  .star { width: 26px; height: 26px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: transform 0.1s; border: 0.5px solid #ddd; background: #f5f5f5; color: #aaa; user-select: none; }
+  .star:hover { transform: scale(1.1); }
+  .star.filled { background: #fef3d0; color: #BA7517; border-color: #EF9F27; }
+  .score-badge { font-size: 12px; font-weight: 500; width: 28px; text-align: center; color: #666; }
+  .section-label { font-size: 11px; font-weight: 500; color: #999; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .total-bar-bg { height: 8px; border-radius: 4px; background: #f0f0f0; border: 0.5px solid #ddd; overflow: hidden; flex: 1; }
+  .total-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; background: #EF9F27; }
+  .verdict { font-size: 13px; font-weight: 500; }
+  button { padding: 8px 16px; border: 0.5px solid #ccc; border-radius: 8px; background: transparent; cursor: pointer; font-size: 13px; width: 100%; margin-top: 12px; }
+  button:hover { background: #f5f5f5; }
+</style>
+</head>
+<body>
+<div style="padding: 1rem 0;">
+  <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 24px;">
+
+    <div>
+      <p class="section-label">Rate each factor (1–5 stars)</p>
+      <div id="factors"></div>
+    </div>
+
+    <div>
+      <p class="section-label">Radar overview</p>
+      <canvas id="radar" width="260" height="260"></canvas>
+      <div style="margin-top: 16px; background: #f8f8f8; border: 0.5px solid #ddd; border-radius: 12px; padding: 14px 16px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="font-size: 13px; color: #555; flex-shrink: 0;">Total score</span>
+          <div class="total-bar-bg"><div class="total-bar-fill" id="totalBarFill" style="width:0%"></div></div>
+          <span style="font-size: 20px; font-weight: 500; min-width: 44px; text-align: right; color: #1a1a1a;" id="totalScore">0 / 25</span>
+        </div>
+        <p class="verdict" id="verdict" style="color: #aaa; margin: 0;">—</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const factors = [
+  { label: "Strategic alignment", question: "Does this advance our product strategy?" },
+  { label: "Impact", question: "How many citizens or agencies benefit?" },
+  { label: "Revenue / cost recovery", question: "Does this help financial sustainability?" },
+  { label: "Reusability", question: "Does this build reusable capabilities?" },
+  { label: "Effort", question: "How much team effort required? (5 = low effort)" },
+];
+
+const scores = [0, 0, 0, 0, 0];
+
+function renderFactors() {
+  const container = document.getElementById('factors');
+  container.innerHTML = '';
+  factors.forEach((f, fi) => {
+    const row = document.createElement('div');
+    row.className = 'factor-row';
+    row.innerHTML = `
+      <div style="flex:1">
+        <div class="factor-label">${f.label}</div>
+        <div class="factor-question">${f.question}</div>
+      </div>
+      <div class="star-group" id="stars-${fi}">
+        ${[1,2,3,4,5].map(s => `<div class="star ${scores[fi] >= s ? 'filled' : ''}" data-fi="${fi}" data-s="${s}">★</div>`).join('')}
+      </div>
+      <span class="score-badge">${scores[fi] > 0 ? scores[fi] : '–'}</span>
+    `;
+    container.appendChild(row);
+  });
+  container.querySelectorAll('.star').forEach(el => {
+    el.addEventListener('click', () => {
+      const fi = +el.dataset.fi, s = +el.dataset.s;
+      scores[fi] = scores[fi] === s ? 0 : s;
+      renderFactors();
+      updateChart();
+      updateTotal();
+    });
+  });
+}
+
+const chart = new Chart(document.getElementById('radar'), {
+  type: 'radar',
+  data: {
+    labels: factors.map(f => f.label),
+    datasets: [{
+      data: [0,0,0,0,0],
+      borderColor: 'rgba(186,117,23,0.65)',
+      backgroundColor: 'rgba(250,199,117,0.3)',
+      pointBackgroundColor: 'rgba(186,117,23,0.65)',
+      pointRadius: 4,
+      borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: false,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      r: {
+        min: 0, max: 5,
+        ticks: { stepSize: 1, display: false },
+        grid: { color: 'rgba(0,0,0,0.08)' },
+        angleLines: { color: 'rgba(0,0,0,0.08)' },
+        pointLabels: {
+          color: 'rgba(0,0,0,0.5)',
+          font: { size: 11 },
+          callback: (val) => val.length > 14 ? val.slice(0,13)+'…' : val
+        }
+      }
+    }
+  }
+});
+
+function updateChart() {
+  chart.data.datasets[0].data = [...scores];
+  chart.update();
+}
+
+function updateTotal() {
+  const total = scores.reduce((a, b) => a + b, 0);
+  document.getElementById('totalScore').textContent = total + ' / 25';
+  document.getElementById('totalBarFill').style.width = (total / 25 * 100) + '%';
+  const v = document.getElementById('verdict');
+  v.style.margin = '0';
+  if (total === 0) { v.textContent = '—'; v.style.color = '#aaa'; }
+  else if (total <= 8) { v.textContent = 'Low priority — reconsider'; v.style.color = '#A32D2D'; }
+  else if (total <= 15) { v.textContent = 'Moderate — worth exploring'; v.style.color = '#BA7517'; }
+  else if (total <= 20) { v.textContent = 'Strong opportunity'; v.style.color = '#3B6D11'; }
+  else { v.textContent = 'Excellent — high priority'; v.style.color = '#0F6E56'; }
+}
+
+renderFactors();
+</script>
+</body>
+</html>
